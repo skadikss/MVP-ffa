@@ -6,7 +6,10 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Vibe Notes v6.1</title>
+    <title>Vibe Notes v7</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -24,9 +27,9 @@
             --accent-hover: #818cf8;
             --deadline-color: #fb923c;
             --scheduled-color: #60a5fa;
+            --neon-glow: 0 0 20px rgba(99, 102, 241, 0.5);
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
-            --vh: 1vh;
         }
 
         [data-theme="light"] {
@@ -38,6 +41,7 @@
             --text-muted: #94a3b8;
             --input-bg: rgba(255, 255, 255, 0.9);
             --column-bg: rgba(255, 255, 255, 0.5);
+            --neon-glow: 0 0 20px rgba(99, 102, 241, 0.3);
         }
 
         [data-theme="sunset"] {
@@ -51,6 +55,21 @@
             --column-bg: rgba(255, 255, 255, 0.05);
             --accent: #f59e0b;
             --accent-hover: #fbbf24;
+            --neon-glow: 0 0 20px rgba(245, 158, 11, 0.5);
+        }
+
+        [data-theme="cosmos"] {
+            --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0a1a 50%, #1a0a2e 100%);
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(139, 92, 246, 0.2);
+            --text-primary: #e0e7ff;
+            --text-secondary: #a5b4fc;
+            --text-muted: #6366f1;
+            --input-bg: rgba(0, 0, 0, 0.4);
+            --column-bg: rgba(139, 92, 246, 0.05);
+            --accent: #8b5cf6;
+            --accent-hover: #a78bfa;
+            --neon-glow: 0 0 30px rgba(139, 92, 246, 0.6), 0 0 60px rgba(139, 92, 246, 0.3);
         }
         
         html, body {
@@ -61,10 +80,20 @@
             color: var(--text-primary);
             transition: background 0.3s ease;
             touch-action: manipulation;
-            /* ❌ УБРАЛИ overflow-x: hidden — он блокировал карусель на iOS */
         }
 
-        /* 🎨 АНИМИРОВАННЫЙ ФОН */
+        /* 🌌 КОСМИЧЕСКИЙ ФОН */
+        #spaceCanvas {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+
+        [data-theme="cosmos"] #spaceCanvas { opacity: 1; }
+
         .bg-wrapper {
             position: fixed;
             inset: 0;
@@ -92,7 +121,7 @@
             animation: float 25s infinite ease-in-out;
         }
 
-        .blob-1 { width: 500px; height: 500px; background: #6366f1; top: -100px; left: -100px; animation-delay: 0s; }
+        .blob-1 { width: 500px; height: 500px; background: #6366f1; top: -100px; left: -100px; }
         .blob-2 { width: 400px; height: 400px; background: #8b5cf6; bottom: -100px; right: -100px; animation-delay: -8s; }
         .blob-3 { width: 350px; height: 350px; background: #ec4899; top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: -16s; opacity: 0.25; }
 
@@ -111,6 +140,11 @@
         [data-theme="sunset"] .blob-2 { background: #ef4444; }
         [data-theme="sunset"] .blob-3 { background: #f97316; }
 
+        [data-theme="cosmos"] .blob { opacity: 0.15; }
+        [data-theme="cosmos"] .blob-1 { background: #8b5cf6; }
+        [data-theme="cosmos"] .blob-2 { background: #6366f1; }
+        [data-theme="cosmos"] .blob-3 { background: #a855f7; }
+
         .app-container {
             background: var(--card-bg);
             backdrop-filter: blur(16px);
@@ -122,6 +156,12 @@
             max-width: 1400px;
             margin: calc(20px + var(--safe-top)) auto calc(20px + var(--safe-bottom));
             padding: 28px;
+            position: relative;
+            transition: box-shadow 0.3s ease;
+        }
+
+        [data-theme="cosmos"] .app-container {
+            box-shadow: var(--neon-glow), 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
         .control-panel {
@@ -132,7 +172,7 @@
             align-items: center;
         }
 
-        .search-box, .theme-selector, .action-btn {
+        .search-box, .theme-selector, .action-btn, .profile-selector {
             background: var(--input-bg);
             border: 1px solid var(--card-border);
             border-radius: 12px;
@@ -142,17 +182,43 @@
             outline: none;
             transition: all 0.3s ease;
             min-height: 44px;
+            position: relative;
+            overflow: hidden;
         }
 
         .search-box { flex: 1; min-width: 200px; }
         .search-box::placeholder { color: var(--text-muted); }
-        .search-box:focus { border-color: var(--accent-hover); box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2); }
+        .search-box:focus { border-color: var(--accent-hover); box-shadow: var(--neon-glow); }
 
-        .theme-selector, .action-btn { cursor: pointer; font-weight: 500; white-space: nowrap; }
-        .theme-selector:hover, .action-btn:hover { border-color: var(--accent-hover); transform: translateY(-1px); }
+        .theme-selector, .action-btn, .profile-selector { 
+            cursor: pointer; 
+            font-weight: 500; 
+            white-space: nowrap; 
+        }
+
+        .theme-selector:hover, .action-btn:hover, .profile-selector:hover { 
+            border-color: var(--accent-hover); 
+            transform: translateY(-1px);
+            box-shadow: var(--neon-glow);
+        }
+
         .action-btn { display: flex; align-items: center; gap: 6px; }
+        .theme-selector option, .profile-selector option { background: #1e1b4b; }
 
-        /* 📋 КАНБАН — ДЕСКТОП */
+        /* ✨ RIPPLE */
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0);
+            animation: ripple-anim 0.6s ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes ripple-anim {
+            to { transform: scale(4); opacity: 0; }
+        }
+
         .kanban-board {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -170,10 +236,15 @@
             min-width: 0;
         }
 
+        [data-theme="cosmos"] .kanban-column {
+            box-shadow: inset 0 0 20px rgba(139, 92, 246, 0.1);
+        }
+
         .kanban-column.drag-over {
             background: rgba(129, 140, 248, 0.1);
             border-color: var(--accent-hover);
             transform: scale(1.01);
+            box-shadow: var(--neon-glow);
         }
 
         .column-header {
@@ -223,6 +294,7 @@
         .tasks-container::-webkit-scrollbar-track { background: transparent; }
         .tasks-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
 
+        /* 💎 3D КАРТОЧКИ */
         .task-item {
             background: var(--card-bg);
             border: 1px solid var(--card-border);
@@ -230,9 +302,11 @@
             border-radius: 12px;
             padding: 12px;
             cursor: grab;
-            transition: all 0.3s ease;
+            transition: background 0.3s, box-shadow 0.3s, opacity 0.3s;
             animation: slideIn 0.3s ease-out;
             position: relative;
+            transform-style: preserve-3d;
+            will-change: transform;
         }
 
         .task-item.priority-high { border-left-color: #ef4444; }
@@ -248,11 +322,14 @@
 
         .task-item:hover {
             background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), var(--neon-glow);
         }
 
-        .task-item.dragging { opacity: 0.4; transform: scale(0.95) rotate(2deg); }
+        [data-theme="cosmos"] .task-item:hover {
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4), var(--neon-glow);
+        }
+
+        .task-item.dragging { opacity: 0.4; }
         .task-item.completed { opacity: 0.6; }
 
         .task-header {
@@ -276,7 +353,7 @@
             margin-top: 1px;
         }
 
-        .checkbox:hover { border-color: var(--accent-hover); }
+        .checkbox:hover { border-color: var(--accent-hover); box-shadow: var(--neon-glow); }
 
         .task-item.completed .checkbox { background: #10b981; border-color: #10b981; }
         .task-item.completed .checkbox::after { content: '✓'; color: white; font-size: 13px; font-weight: bold; }
@@ -475,22 +552,53 @@
             border-top: 1px solid var(--card-border);
         }
 
+        .add-task-input-wrapper {
+            position: relative;
+            margin-bottom: 8px;
+        }
+
         .add-task-input {
             width: 100%;
             background: var(--input-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
-            padding: 10px 12px;
+            padding: 10px 90px 10px 12px;
             color: var(--text-primary);
             font-size: 14px;
             outline: none;
-            margin-bottom: 8px;
             transition: all 0.3s ease;
             min-height: 44px;
         }
 
         .add-task-input::placeholder { color: var(--text-muted); }
-        .add-task-input:focus { border-color: var(--accent-hover); }
+        .add-task-input:focus { border-color: var(--accent-hover); box-shadow: var(--neon-glow); }
+
+        .input-actions {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            gap: 4px;
+        }
+
+        .voice-btn, .ai-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 18px;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .voice-btn:hover, .ai-btn:hover { color: var(--accent-hover); background: rgba(255, 255, 255, 0.05); }
+        .voice-btn.recording { color: #ef4444; animation: pulse 1s infinite; }
 
         .add-task-extras {
             display: flex;
@@ -546,12 +654,68 @@
             cursor: pointer;
             transition: all 0.2s;
             min-height: 44px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .add-btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .add-btn:hover { 
+            background: var(--accent-hover); 
+            transform: translateY(-1px);
+            box-shadow: var(--neon-glow);
+        }
 
         .empty-state { text-align: center; color: var(--text-muted); padding: 30px 15px; font-size: 13px; }
 
+        /* 🤖 AI ПОДСКАЗКА */
+        .ai-suggestion {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 10px;
+            padding: 8px 10px;
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .ai-suggestion-text { flex: 1; }
+
+        .ai-suggestion-btn {
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            padding: 3px 8px;
+            color: white;
+            font-size: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .ai-suggestion-btn:hover { background: var(--accent-hover); }
+
+        /* 🔆 НЕОНОВЫЕ АКЦЕНТЫ */
+        [data-theme="cosmos"] .column-title,
+        [data-theme="cosmos"] .modal-title {
+            text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        }
+
+        [data-theme="cosmos"] .task-item.priority-high {
+            box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.2), 0 0 15px rgba(239, 68, 68, 0.1);
+        }
+
+        [data-theme="cosmos"] .task-item.priority-medium {
+            box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.2), 0 0 15px rgba(245, 158, 11, 0.1);
+        }
+
+        [data-theme="cosmos"] .task-item.priority-low {
+            box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 15px rgba(16, 185, 129, 0.1);
+        }
+
+        /* 🎛 МОДАЛКИ */
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -580,6 +744,10 @@
             max-height: 90dvh;
             overflow-y: auto;
             animation: slideUp 0.3s ease-out;
+        }
+
+        [data-theme="cosmos"] .modal {
+            box-shadow: var(--neon-glow), 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
         @keyframes slideUp {
@@ -615,10 +783,18 @@
 
         .modal-close:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
-        .category-form { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .category-form, .profile-form, .integrations-form { 
+            display: flex; 
+            gap: 8px; 
+            margin-bottom: 16px; 
+            flex-wrap: wrap; 
+        }
 
         .category-form input[type="text"],
-        .category-form input[type="color"] {
+        .category-form input[type="color"],
+        .profile-form input[type="text"],
+        .integrations-form input[type="text"],
+        .integrations-form textarea {
             background: var(--input-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
@@ -629,11 +805,36 @@
             min-height: 44px;
         }
 
-        .category-form input[type="text"] { flex: 1; min-width: 120px; }
-        .category-form input[type="text"]::placeholder { color: var(--text-muted); }
-        .category-form input[type="color"] { width: 50px; padding: 4px; cursor: pointer; }
+        .category-form input[type="text"],
+        .profile-form input[type="text"],
+        .integrations-form input[type="text"] { 
+            flex: 1; 
+            min-width: 120px; 
+        }
 
-        .category-form button {
+        .category-form input[type="text"]::placeholder,
+        .profile-form input[type="text"]::placeholder,
+        .integrations-form input[type="text"]::placeholder,
+        .integrations-form textarea::placeholder { 
+            color: var(--text-muted); 
+        }
+
+        .category-form input[type="color"] { 
+            width: 50px; 
+            padding: 4px; 
+            cursor: pointer; 
+        }
+
+        .integrations-form textarea {
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .category-form button,
+        .profile-form button,
+        .integrations-form button {
             background: var(--accent);
             border: none;
             border-radius: 10px;
@@ -645,11 +846,17 @@
             transition: background 0.2s;
         }
 
-        .category-form button:hover { background: var(--accent-hover); }
+        .category-form button:hover,
+        .profile-form button:hover,
+        .integrations-form button:hover { background: var(--accent-hover); }
 
-        .categories-list { display: flex; flex-direction: column; gap: 8px; }
+        .categories-list, .profiles-list { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+        }
 
-        .category-item {
+        .category-item, .profile-item {
             background: var(--input-bg);
             border: 1px solid var(--card-border);
             border-radius: 12px;
@@ -660,9 +867,14 @@
             transition: all 0.2s;
         }
 
-        .category-item:hover { border-color: var(--accent-hover); }
+        .category-item:hover, .profile-item:hover { border-color: var(--accent-hover); }
 
-        .category-emoji {
+        .profile-item.active {
+            border-color: var(--accent);
+            box-shadow: var(--neon-glow);
+        }
+
+        .category-emoji, .profile-avatar {
             font-size: 24px;
             width: 40px;
             height: 40px;
@@ -674,25 +886,50 @@
             flex-shrink: 0;
         }
 
-        .category-info { flex: 1; min-width: 0; }
-        .category-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .category-count { font-size: 12px; color: var(--text-muted); }
+        .category-info, .profile-info { flex: 1; min-width: 0; }
+        .category-name, .profile-name { font-weight: 600; font-size: 15px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .category-count, .profile-count { font-size: 12px; color: var(--text-muted); }
 
         .category-color-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
 
-        .category-delete {
+        .category-delete, .profile-delete, .profile-activate {
             background: transparent;
             border: none;
             color: var(--text-muted);
             cursor: pointer;
-            font-size: 18px;
+            font-size: 14px;
             padding: 6px 10px;
             border-radius: 8px;
             transition: all 0.2s;
         }
 
-        .category-delete:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .category-delete:hover, .profile-delete:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .profile-activate:hover { background: rgba(16, 185, 129, 0.1); color: #10b981; }
 
+        .integration-section {
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+
+        .integration-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .integration-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        /* 📅 КАЛЕНДАРЬ */
         .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 
         .calendar-nav button {
@@ -798,6 +1035,7 @@
             font-size: 14px;
         }
 
+        /* 🔔 TOAST */
         .toast {
             position: fixed;
             top: calc(20px + var(--safe-top));
@@ -833,7 +1071,35 @@
             margin-bottom: 10px;
         }
 
-        /* 📱 МОБИЛЬНАЯ ВЕРСИЯ — ПОЛНОСТЬЮ ПЕРЕПИСАНА */
+        /* ☁️ SYNC STATUS */
+        .sync-status {
+            position: fixed;
+            bottom: calc(20px + var(--safe-bottom));
+            right: 20px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 100;
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #64748b;
+        }
+
+        .sync-dot.online { background: #10b981; animation: pulse 2s infinite; }
+        .sync-dot.syncing { background: #f59e0b; animation: pulse 1s infinite; }
+
+        /* 📱 МОБИЛЬНАЯ ВЕРСИЯ */
         @media (max-width: 768px) {
             .app-container {
                 margin: calc(10px + var(--safe-top)) 10px calc(10px + var(--safe-bottom)) 10px;
@@ -843,7 +1109,6 @@
 
             .control-panel { gap: 8px; }
 
-            /* 🎯 КАРУСЕЛЬ ДЛЯ ТЕЛЕФОНА */
             .kanban-board {
                 display: flex !important;
                 flex-direction: row !important;
@@ -861,13 +1126,11 @@
             .kanban-board::-webkit-scrollbar { display: none; }
 
             .kanban-column {
-                /* ❗ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: используем flex-basis вместо min/max-width */
                 flex: 0 0 auto;
                 width: calc(100vw - 56px);
                 max-width: calc(100vw - 56px);
                 min-width: calc(100vw - 56px);
                 scroll-snap-align: start;
-                /* Явная минимальная высота чтобы колонка не схлопывалась */
                 min-height: 400px;
             }
 
@@ -882,6 +1145,16 @@
             .modal-overlay { padding: 10px; }
             .calendar-day { font-size: 12px; }
             .toast { left: 10px; right: 10px; top: calc(10px + var(--safe-top)); }
+
+            .sync-status {
+                bottom: calc(10px + var(--safe-bottom));
+                right: 10px;
+                left: 10px;
+                max-width: none;
+            }
+
+            /* Отключаем 3D-tilt на мобильных для производительности */
+            .task-item { transform: none !important; }
         }
 
         @media (max-width: 380px) {
@@ -892,6 +1165,8 @@
     </style>
 </head>
 <body data-theme="dark">
+
+    <canvas id="spaceCanvas"></canvas>
 
     <div class="bg-wrapper">
         <div class="bg-grid"></div>
@@ -904,17 +1179,22 @@
         <div class="control-panel">
             <input type="text" class="search-box" id="searchBox" placeholder="🔍 Поиск задач...">
             
+            <select class="profile-selector" id="profileSelector" title="Профиль"></select>
+            
             <select class="theme-selector" id="themeSelector">
                 <option value="dark">🌙 Тема</option>
                 <option value="light">☀️ Светлая</option>
                 <option value="sunset">🌅 Закат</option>
+                <option value="cosmos">🌌 Космос</option>
             </select>
 
-            <button class="action-btn" id="calendarBtn">📅</button>
-            <button class="action-btn" id="categoriesBtn">🏷</button>
-            <button class="action-btn" id="exportBtn">📤</button>
-            <button class="action-btn" id="importBtn">📥</button>
-            <button class="action-btn" id="notifyBtn">🔔</button>
+            <button class="action-btn" id="calendarBtn" title="Календарь">📅</button>
+            <button class="action-btn" id="categoriesBtn" title="Категории">🏷</button>
+            <button class="action-btn" id="profilesBtn" title="Профили">👥</button>
+            <button class="action-btn" id="integrationsBtn" title="Интеграции">🔗</button>
+            <button class="action-btn" id="exportBtn" title="Экспорт">📤</button>
+            <button class="action-btn" id="importBtn" title="Импорт">📥</button>
+            <button class="action-btn" id="notifyBtn" title="Уведомления">🔔</button>
         </div>
 
         <div class="swipe-hint">← Свайпни для переключения колонок →</div>
@@ -922,6 +1202,12 @@
         <div class="kanban-board" id="kanbanBoard"></div>
     </div>
 
+    <div class="sync-status" id="syncStatus">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncText">Локально</span>
+    </div>
+
+    <!-- КАЛЕНДАРЬ -->
     <div class="modal-overlay" id="calendarModal">
         <div class="modal">
             <div class="modal-header">
@@ -945,15 +1231,16 @@
         </div>
     </div>
 
+    <!-- КАТЕГОРИИ -->
     <div class="modal-overlay" id="categoriesModal">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title">🏷 Мои категории</div>
+                <div class="modal-title">🏷 Категории</div>
                 <button class="modal-close" id="closeCategories">×</button>
             </div>
             <div class="category-form">
                 <input type="text" id="newCatEmoji" placeholder="🎯" maxlength="2" style="max-width: 60px;">
-                <input type="text" id="newCatName" placeholder="Название категории">
+                <input type="text" id="newCatName" placeholder="Название">
                 <input type="color" id="newCatColor" value="#6366f1">
                 <button id="addCategoryBtn">+ Добавить</button>
             </div>
@@ -961,36 +1248,91 @@
         </div>
     </div>
 
-    <script>
-        // 📱 ФИКС iOS: корректная высота viewport
-        function setViewportHeight() {
-            const vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-        }
-        setViewportHeight();
-        window.addEventListener('resize', setViewportHeight);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(setViewportHeight, 100);
-        });
+    <!-- ПРОФИЛИ -->
+    <div class="modal-overlay" id="profilesModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">👥 Профили</div>
+                <button class="modal-close" id="closeProfiles">×</button>
+            </div>
+            <div class="profile-form">
+                <input type="text" id="newProfileName" placeholder="Имя профиля">
+                <button id="addProfileBtn">+ Создать</button>
+            </div>
+            <div class="profiles-list" id="profilesList"></div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--card-border); font-size: 12px; color: var(--text-muted);">
+                💡 Каждый профиль имеет свои задачи и категории. Переключайся между ними в верхнем меню.
+            </div>
+        </div>
+    </div>
 
-        // 📦 СОСТОЯНИЕ
+    <!-- ИНТЕГРАЦИИ -->
+    <div class="modal-overlay" id="integrationsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">🔗 Интеграции</div>
+                <button class="modal-close" id="closeIntegrations">×</button>
+            </div>
+
+            <div class="integration-section">
+                <div class="integration-title">📅 Google Calendar (.ics)</div>
+                <div class="integration-desc">Экспортируй задачи с дедлайнами в формате .ics для импорта в Google Calendar, Apple Calendar и др.</div>
+                <button class="action-btn" id="exportICS" style="width:100%; justify-content:center;">📥 Скачать .ics файл</button>
+            </div>
+
+            <div class="integration-section">
+                <div class="integration-title">📱 Telegram уведомления</div>
+                <div class="integration-desc">Отправляй задачи в Telegram через бота. Создай бота через @BotFather и укажи токен + chat_id.</div>
+                <input type="text" id="tgBotToken" placeholder="Bot Token (123456:ABC-DEF...)">
+                <input type="text" id="tgChatId" placeholder="Chat ID (например, 123456789)" style="margin-top:8px;">
+                <button id="saveTgSettings" style="margin-top:8px; width:100%; background:var(--accent); border:none; border-radius:10px; padding:10px; color:white; cursor:pointer;">💾 Сохранить</button>
+                <button id="testTg" style="margin-top:8px; width:100%; background:var(--input-bg); border:1px solid var(--card-border); border-radius:10px; padding:10px; color:var(--text-primary); cursor:pointer;">🧪 Тестовое сообщение</button>
+            </div>
+
+            <div class="integration-section">
+                <div class="integration-title">🌐 Firebase синхронизация</div>
+                <div class="integration-desc">Синхронизируй данные между устройствами. <a href="https://console.firebase.google.com/" target="_blank" style="color:var(--accent-hover);">Инструкция по настройке →</a></div>
+                <textarea id="firebaseConfig" placeholder='Вставь сюда firebaseConfig из Firebase Console (объект JSON)'></textarea>
+                <button id="saveFirebase" style="margin-top:8px; width:100%; background:var(--accent); border:none; border-radius:10px; padding:10px; color:white; cursor:pointer;">💾 Сохранить и подключить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════
+        // 📦 СОСТОЯНИЕ И ПРОФИЛИ
+        // ═══════════════════════════════════════════════════════
         const DEFAULT_CATEGORIES = [
             { id: 'personal', name: 'Личное', emoji: '🏠', color: '#10b981' },
             { id: 'work', name: 'Работа', emoji: '💼', color: '#3b82f6' },
             { id: 'idea', name: 'Идеи', emoji: '💡', color: '#a855f7' }
         ];
 
-        let categories = JSON.parse(localStorage.getItem('vibe_categories_v6')) || DEFAULT_CATEGORIES;
-        let tasks = JSON.parse(localStorage.getItem('vibe_tasks_v6')) || [];
-        let searchQuery = '';
-        let notificationsEnabled = false;
-        let draggedTask = null;
-        let calendarDate = new Date();
+        let profiles = JSON.parse(localStorage.getItem('vibe_profiles_v7')) || [
+            { id: 'default', name: 'Мой профиль', emoji: '👤' }
+        ];
+        let currentProfileId = localStorage.getItem('vibe_current_profile_v7') || 'default';
 
+        function getProfileData(profileId) {
+            const data = localStorage.getItem(`vibe_data_${profileId}_v7`);
+            return data ? JSON.parse(data) : { 
+                categories: [...DEFAULT_CATEGORIES], 
+                tasks: [] 
+            };
+        }
+
+        function saveProfileData(profileId, data) {
+            localStorage.setItem(`vibe_data_${profileId}_v7`, JSON.stringify(data));
+        }
+
+        let profileData = getProfileData(currentProfileId);
+        let categories = profileData.categories;
+        let tasks = profileData.tasks;
+
+        // Миграция старых данных
         tasks = tasks.map(t => {
             if (t.category && !t.categoryId) {
-                const catMap = { personal: 'personal', work: 'work', idea: 'idea' };
-                t.categoryId = catMap[t.category] || 'personal';
+                t.categoryId = { personal: 'personal', work: 'work', idea: 'idea' }[t.category] || 'personal';
                 delete t.category;
             }
             if (!t.subtasks) t.subtasks = [];
@@ -1000,10 +1342,550 @@
         });
 
         function save() {
-            localStorage.setItem('vibe_categories_v6', JSON.stringify(categories));
-            localStorage.setItem('vibe_tasks_v6', JSON.stringify(tasks));
+            saveProfileData(currentProfileId, { categories, tasks });
+            saveToCloud();
         }
 
+        // ═══════════════════════════════════════════════════════
+        // ☁️ FIREBASE (ОПЦИОНАЛЬНО)
+        // ═══════════════════════════════════════════════════════
+        let db = null;
+        let isCloudSync = false;
+        let cloudUserId = null;
+
+        function initFirebase() {
+            const configStr = localStorage.getItem('vibe_firebase_config_v7');
+            if (!configStr) {
+                updateSyncStatus('offline');
+                return;
+            }
+            try {
+                const config = JSON.parse(configStr);
+                firebase.initializeApp(config);
+                db = firebase.firestore();
+                cloudUserId = 'user_' + currentProfileId + '_' + (localStorage.getItem('vibe_cloud_id_v7') || (() => {
+                    const id = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('vibe_cloud_id_v7', id);
+                    return id;
+                })());
+                
+                loadFromCloud();
+                listenToCloudChanges();
+            } catch (e) {
+                console.error('Firebase error:', e);
+                updateSyncStatus('offline');
+            }
+        }
+
+        function updateSyncStatus(status) {
+            const dot = document.getElementById('syncDot');
+            const text = document.getElementById('syncText');
+            dot.className = 'sync-dot';
+            if (status === 'online') {
+                dot.classList.add('online');
+                text.textContent = 'Облако ✓';
+            } else if (status === 'syncing') {
+                dot.classList.add('syncing');
+                text.textContent = 'Синхронизация...';
+            } else {
+                text.textContent = 'Локально';
+            }
+        }
+
+        async function loadFromCloud() {
+            if (!db || !cloudUserId) return;
+            try {
+                const doc = await db.collection('users').doc(cloudUserId).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.tasks) tasks = data.tasks;
+                    if (data.categories) categories = data.categories;
+                    save();
+                    renderBoard();
+                    updateSyncStatus('online');
+                    isCloudSync = true;
+                } else {
+                    saveToCloud();
+                }
+            } catch (e) {
+                console.error('Load error:', e);
+                updateSyncStatus('offline');
+            }
+        }
+
+        let saveTimeout = null;
+        async function saveToCloud() {
+            if (!db || !cloudUserId) return;
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                updateSyncStatus('syncing');
+                try {
+                    await db.collection('users').doc(cloudUserId).set({
+                        tasks, categories,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    updateSyncStatus('online');
+                    isCloudSync = true;
+                } catch (e) {
+                    console.error('Save error:', e);
+                    updateSyncStatus('offline');
+                }
+            }, 1000);
+        }
+
+        function listenToCloudChanges() {
+            if (!db || !cloudUserId) return;
+            db.collection('users').doc(cloudUserId).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.tasks) tasks = data.tasks;
+                    if (data.categories) categories = data.categories;
+                    renderBoard();
+                }
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 🌌 КОСМИЧЕСКИЙ ФОН
+        // ═══════════════════════════════════════════════════════
+        const canvas = document.getElementById('spaceCanvas');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+        let nebulae = [];
+        let shootingStars = [];
+        let mouseX = 0, mouseY = 0;
+
+        function initSpace() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            stars = [];
+            for (let i = 0; i < 300; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 1.5 + 0.3,
+                    opacity: Math.random(),
+                    twinkleSpeed: Math.random() * 0.02 + 0.005,
+                    depth: Math.random() * 3 + 1
+                });
+            }
+            
+            nebulae = [];
+            const colors = ['240, 70%, 50%', '270, 70%, 50%', '300, 70%, 50%', '200, 70%, 50%'];
+            for (let i = 0; i < 4; i++) {
+                nebulae.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 250 + 150,
+                    color: colors[i],
+                    speed: Math.random() * 0.1 + 0.05,
+                    phase: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function drawSpace() {
+            if (document.body.getAttribute('data-theme') !== 'cosmos') {
+                requestAnimationFrame(drawSpace);
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Туманности
+            nebulae.forEach(n => {
+                n.phase += 0.002;
+                const x = n.x + Math.sin(n.phase) * 30 + (mouseX - canvas.width/2) * 0.02;
+                const y = n.y + Math.cos(n.phase) * 30 + (mouseY - canvas.height/2) * 0.02;
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, n.radius);
+                gradient.addColorStop(0, `hsla(${n.color}, 0.15)`);
+                gradient.addColorStop(0.5, `hsla(${n.color}, 0.05)`);
+                gradient.addColorStop(1, `hsla(${n.color}, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            });
+
+            // Звёзды с параллаксом
+            stars.forEach(s => {
+                const parallaxX = (mouseX - canvas.width/2) * 0.01 * s.depth;
+                const parallaxY = (mouseY - canvas.height/2) * 0.01 * s.depth;
+                const x = s.x + parallaxX;
+                const y = s.y + parallaxY;
+                
+                s.opacity += s.twinkleSpeed;
+                if (s.opacity > 1 || s.opacity < 0.2) s.twinkleSpeed = -s.twinkleSpeed;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, s.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity})`;
+                ctx.fill();
+                
+                // Свечение для крупных звёзд
+                if (s.radius > 1) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, s.radius * 3, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(200, 220, 255, ${s.opacity * 0.1})`;
+                    ctx.fill();
+                }
+            });
+
+            // Падающие звёзды
+            if (Math.random() < 0.003) {
+                shootingStars.push({
+                    x: Math.random() * canvas.width,
+                    y: 0,
+                    speed: Math.random() * 8 + 6,
+                    length: Math.random() * 80 + 40,
+                    opacity: 1
+                });
+            }
+
+            shootingStars = shootingStars.filter(s => {
+                s.x += s.speed;
+                s.y += s.speed;
+                s.opacity -= 0.015;
+                
+                if (s.opacity <= 0) return false;
+                
+                const gradient = ctx.createLinearGradient(
+                    s.x, s.y,
+                    s.x - s.length, s.y - s.length
+                );
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${s.opacity})`);
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(s.x - s.length, s.y - s.length);
+                ctx.stroke();
+                
+                return true;
+            });
+
+            requestAnimationFrame(drawSpace);
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        // Гироскоп для мобильных
+        window.addEventListener('deviceorientation', (e) => {
+            if (e.gamma !== null) mouseX = canvas.width/2 + e.gamma * 10;
+            if (e.beta !== null) mouseY = canvas.height/2 + (e.beta - 45) * 10;
+        });
+
+        initSpace();
+        drawSpace();
+        window.addEventListener('resize', initSpace);
+
+        // ═══════════════════════════════════════════════════════
+        // 💎 3D TILT ЭФФЕКТ
+        // ═══════════════════════════════════════════════════════
+        function initTiltEffect(element) {
+            if (window.innerWidth <= 768) return; // Отключаем на мобильных
+            
+            element.addEventListener('mousemove', (e) => {
+                const rect = element.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = (y - centerY) / 15;
+                const rotateY = (centerX - x) / 15;
+                
+                element.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(5px)`;
+            });
+            
+            element.addEventListener('mouseleave', () => {
+                element.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateZ(0)';
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // ✨ RIPPLE ЭФФЕКТ
+        // ═══════════════════════════════════════════════════════
+        function addRipple(element, e) {
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            const rect = element.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = (e.clientX - rect.left - size/2) + 'px';
+            ripple.style.top = (e.clientY - rect.top - size/2) + 'px';
+            element.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        }
+
+        document.querySelectorAll('.action-btn, .add-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => addRipple(btn, e));
+        });
+
+        // ═══════════════════════════════════════════════════════
+        // 🧲 МАГНИТНЫЕ КНОПКИ
+        // ═══════════════════════════════════════════════════════
+        if (window.innerWidth > 768) {
+            document.querySelectorAll('.action-btn').forEach(btn => {
+                btn.addEventListener('mousemove', (e) => {
+                    const rect = btn.getBoundingClientRect();
+                    const x = e.clientX - rect.left - rect.width / 2;
+                    const y = e.clientY - rect.top - rect.height / 2;
+                    btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+                });
+                btn.addEventListener('mouseleave', () => {
+                    btn.style.transform = '';
+                });
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 🤖 AI-АССИСТЕНТ
+        // ═══════════════════════════════════════════════════════
+        function analyzeTask(text) {
+            const suggestions = [];
+            const lower = text.toLowerCase();
+            
+            // Автокатегория
+            let suggestedCategory = null;
+            if (/купить|заказать|магазин|продукт|еда|продукты|аптек|врач|дом|семь/.test(lower)) {
+                suggestedCategory = 'personal';
+            } else if (/отчёт|встреча|дедлайн|проект|клиент|работ|задач|звонк|письм|код|разработ/.test(lower)) {
+                suggestedCategory = 'work';
+            } else if (/идея|подумать|придумать|концепт|план|мечт|хочу попроб/.test(lower)) {
+                suggestedCategory = 'idea';
+            }
+            
+            if (suggestedCategory) {
+                const cat = categories.find(c => c.id === suggestedCategory);
+                if (cat) {
+                    suggestions.push({ 
+                        type: 'category', 
+                        value: suggestedCategory,
+                        text: `Категория "${cat.name}"?`,
+                        action: 'apply'
+                    });
+                }
+            }
+            
+            // Высокий приоритет
+            if (/срочно|важно|быстро|немедленно|горит|критично/.test(lower)) {
+                suggestions.push({ 
+                    type: 'priority', 
+                    value: 'high',
+                    text: 'Поставить высокий приоритет?',
+                    action: 'apply'
+                });
+            }
+            
+            // Предложение подзадач
+            if (text.length > 60 || /проект|запуск|подготов|организовать|сделать больш/.test(lower)) {
+                suggestions.push({ 
+                    type: 'subtasks',
+                    text: 'Разбить на подзадачи?',
+                    action: 'apply'
+                });
+            }
+            
+            // Дедлайн
+            if (/завтра|сегодня|послезавтра|на неделе|до пятниц|до понедель/.test(lower)) {
+                suggestions.push({ 
+                    type: 'deadline',
+                    text: 'Установить дедлайн?',
+                    action: 'apply'
+                });
+            }
+            
+            return suggestions;
+        }
+
+        function applySuggestion(taskId, suggestion, inputEl) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            if (suggestion.type === 'category') {
+                task.categoryId = suggestion.value;
+            } else if (suggestion.type === 'priority') {
+                task.priority = suggestion.value;
+            } else if (suggestion.type === 'subtasks') {
+                // Автоматически создаём подзадачи
+                const words = task.text.split(' ').filter(w => w.length > 3);
+                if (words.length > 0) {
+                    task.subtasks = [
+                        { id: Date.now(), text: 'Подготовить', done: false },
+                        { id: Date.now() + 1, text: 'Выполнить', done: false },
+                        { id: Date.now() + 2, text: 'Проверить', done: false }
+                    ];
+                }
+            } else if (suggestion.type === 'deadline') {
+                const now = new Date();
+                let deadline = new Date();
+                if (/завтра/.test(task.text.toLowerCase())) {
+                    deadline.setDate(now.getDate() + 1);
+                } else if (/послезавтра/.test(task.text.toLowerCase())) {
+                    deadline.setDate(now.getDate() + 2);
+                } else {
+                    deadline.setDate(now.getDate() + 3);
+                }
+                deadline.setHours(18, 0, 0, 0);
+                task.deadline = deadline.toISOString().slice(0, 16);
+            }
+            
+            save();
+            renderBoard();
+            showToast('🤖 AI применил подсказку', 'success');
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 🎤 ГОЛОСОВОЙ ВВОД
+        // ═══════════════════════════════════════════════════════
+        let recognition = null;
+        let isRecording = false;
+        let currentVoiceInput = null;
+
+        function initVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return null;
+            
+            const rec = new SpeechRecognition();
+            rec.lang = 'ru-RU';
+            rec.continuous = false;
+            rec.interimResults = false;
+            
+            rec.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                if (currentVoiceInput) {
+                    currentVoiceInput.value = text;
+                    currentVoiceInput.focus();
+                }
+                stopRecording();
+            };
+            
+            rec.onerror = (event) => {
+                console.error('Voice error:', event.error);
+                stopRecording();
+                if (event.error === 'not-allowed') {
+                    showToast('❌ Доступ к микрофону запрещён', 'danger');
+                }
+            };
+            
+            rec.onend = () => {
+                stopRecording();
+            };
+            
+            return rec;
+        }
+
+        function startRecording(inputEl) {
+            if (!recognition) {
+                recognition = initVoiceRecognition();
+            }
+            if (!recognition) {
+                showToast('❌ Голосовой ввод не поддерживается', 'danger');
+                return;
+            }
+            
+            currentVoiceInput = inputEl;
+            isRecording = true;
+            
+            const voiceBtn = inputEl.parentElement.querySelector('.voice-btn');
+            if (voiceBtn) voiceBtn.classList.add('recording');
+            
+            try {
+                recognition.start();
+                showToast('🎤 Говори...', 'success');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            if (recognition) {
+                try { recognition.stop(); } catch(e) {}
+            }
+            document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('recording'));
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 🔗 ИНТЕГРАЦИИ
+        // ═══════════════════════════════════════════════════════
+        function exportToICS() {
+            const tasksWithDeadline = tasks.filter(t => t.deadline);
+            if (tasksWithDeadline.length === 0) {
+                showToast('❌ Нет задач с дедлайнами', 'danger');
+                return;
+            }
+            
+            let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//VibeNotes//RU\r\nCALSCALE:GREGORIAN\r\n';
+            
+            tasksWithDeadline.forEach(task => {
+                const dt = new Date(task.deadline);
+                const dtStr = dt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                const endDt = new Date(dt.getTime() + 60 * 60 * 1000);
+                const endDtStr = endDt.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                
+                const cat = categories.find(c => c.id === task.categoryId);
+                const summary = task.text.replace(/[\n\r]/g, ' ');
+                const category = cat ? cat.name : '';
+                
+                ics += 'BEGIN:VEVENT\r\n';
+                ics += `UID:${task.id}@vibenotes\r\n`;
+                ics += `DTSTART:${dtStr}\r\n`;
+                ics += `DTEND:${endDtStr}\r\n`;
+                ics += `SUMMARY:${summary}\r\n`;
+                ics += `CATEGORIES:${category}\r\n`;
+                ics += `DESCRIPTION:Приоритет: ${task.priority}\r\n`;
+                ics += 'END:VEVENT\r\n';
+            });
+            
+            ics += 'END:VCALENDAR\r\n';
+            
+            const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vibe-notes-${new Date().toISOString().split('T')[0]}.ics`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('📅 Экспортировано в .ics!', 'success');
+        }
+
+        async function sendToTelegram(text) {
+            const token = localStorage.getItem('vibe_tg_token_v7');
+            const chatId = localStorage.getItem('vibe_tg_chatid_v7');
+            
+            if (!token || !chatId) {
+                showToast('❌ Сначала настрой Telegram в интеграциях', 'danger');
+                return false;
+            }
+            
+            try {
+                const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: text,
+                        parse_mode: 'HTML'
+                    })
+                });
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.description);
+                return true;
+            } catch (e) {
+                console.error('Telegram error:', e);
+                showToast('❌ Ошибка: ' + e.message, 'danger');
+                return false;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 🎨 ТЕМА
+        // ═══════════════════════════════════════════════════════
         const themeSelector = document.getElementById('themeSelector');
         const savedTheme = localStorage.getItem('vibe_theme') || 'dark';
         document.body.setAttribute('data-theme', savedTheme);
@@ -1013,11 +1895,120 @@
             localStorage.setItem('vibe_theme', e.target.value);
         });
 
+        // ═══════════════════════════════════════════════════════
+        // 🔍 ПОИСК
+        // ═══════════════════════════════════════════════════════
+        let searchQuery = '';
         document.getElementById('searchBox').addEventListener('input', (e) => {
             searchQuery = e.target.value.toLowerCase();
             renderBoard();
         });
 
+        // ═══════════════════════════════════════════════════════
+        // 👥 ПРОФИЛИ
+        // ═══════════════════════════════════════════════════════
+        const profileSelector = document.getElementById('profileSelector');
+
+        function renderProfileSelector() {
+            profileSelector.innerHTML = '';
+            profiles.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = `${p.emoji} ${p.name}`;
+                if (p.id === currentProfileId) opt.selected = true;
+                profileSelector.appendChild(opt);
+            });
+        }
+
+        profileSelector.addEventListener('change', (e) => {
+            switchProfile(e.target.value);
+        });
+
+        function switchProfile(profileId) {
+            currentProfileId = profileId;
+            localStorage.setItem('vibe_current_profile_v7', profileId);
+            profileData = getProfileData(profileId);
+            categories = profileData.categories;
+            tasks = profileData.tasks;
+            renderProfileSelector();
+            renderBoard();
+            showToast(`👥 Профиль: ${profiles.find(p => p.id === profileId).name}`, 'success');
+        }
+
+        const profilesModal = document.getElementById('profilesModal');
+        document.getElementById('profilesBtn').addEventListener('click', () => {
+            profilesModal.classList.add('active');
+            renderProfilesList();
+        });
+        document.getElementById('closeProfiles').addEventListener('click', () => {
+            profilesModal.classList.remove('active');
+        });
+        profilesModal.addEventListener('click', (e) => {
+            if (e.target === profilesModal) profilesModal.classList.remove('active');
+        });
+
+        document.getElementById('addProfileBtn').addEventListener('click', () => {
+            const name = document.getElementById('newProfileName').value.trim();
+            if (!name) {
+                showToast('❌ Введи имя профиля', 'danger');
+                return;
+            }
+            const emojis = ['👤', '👨', '👩', '🧑', '👨‍💼', '👩‍💼', '🧑‍💻', '👨‍🎓', '👩‍🎓'];
+            const newProfile = {
+                id: 'p_' + Date.now(),
+                name,
+                emoji: emojis[Math.floor(Math.random() * emojis.length)]
+            };
+            profiles.push(newProfile);
+            localStorage.setItem('vibe_profiles_v7', JSON.stringify(profiles));
+            document.getElementById('newProfileName').value = '';
+            renderProfilesList();
+            renderProfileSelector();
+            showToast('✅ Профиль создан', 'success');
+        });
+
+        function renderProfilesList() {
+            const list = document.getElementById('profilesList');
+            list.innerHTML = '';
+            profiles.forEach(p => {
+                const data = getProfileData(p.id);
+                const isActive = p.id === currentProfileId;
+                const item = document.createElement('div');
+                item.className = `profile-item ${isActive ? 'active' : ''}`;
+                item.innerHTML = `
+                    <div class="profile-avatar">${p.emoji}</div>
+                    <div class="profile-info">
+                        <div class="profile-name">${p.name}${isActive ? ' <span style="color:var(--accent);font-size:11px;">(активен)</span>' : ''}</div>
+                        <div class="profile-count">${data.tasks.length} задач</div>
+                    </div>
+                    ${!isActive ? `<button class="profile-activate" onclick="activateProfile('${p.id}')">✓ Активировать</button>` : ''}
+                    ${profiles.length > 1 ? `<button class="profile-delete" onclick="deleteProfile('${p.id}')">×</button>` : ''}
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        window.activateProfile = (id) => {
+            switchProfile(id);
+            renderProfilesList();
+        };
+
+        window.deleteProfile = (id) => {
+            if (!confirm('Удалить профиль и все его данные?')) return;
+            profiles = profiles.filter(p => p.id !== id);
+            localStorage.setItem('vibe_profiles_v7', JSON.stringify(profiles));
+            localStorage.removeItem(`vibe_data_${id}_v7`);
+            if (currentProfileId === id) {
+                switchProfile(profiles[0].id);
+            }
+            renderProfilesList();
+            renderProfileSelector();
+            showToast('🗑 Профиль удалён', 'success');
+        };
+
+        // ═══════════════════════════════════════════════════════
+        // 📅 ФОРМАТИРОВАНИЕ ДАТ
+        // ═══════════════════════════════════════════════════════
         function formatDeadline(deadline) {
             if (!deadline) return null;
             const now = new Date();
@@ -1055,6 +2046,11 @@
 
             return { status, text };
         }
+
+        // ═══════════════════════════════════════════════════════
+        // 🎨 РЕНДЕР ДОСКИ
+        // ═══════════════════════════════════════════════════════
+        let draggedTask = null;
 
         function renderBoard() {
             const board = document.getElementById('kanbanBoard');
@@ -1098,7 +2094,13 @@
                 </div>
                 <div class="tasks-container" id="tasks-${category.id}"></div>
                 <div class="add-task-form">
-                    <input type="text" class="add-task-input" placeholder="Новая задача..." data-category-id="${category.id}">
+                    <div class="add-task-input-wrapper">
+                        <input type="text" class="add-task-input" placeholder="Новая задача..." data-category-id="${category.id}">
+                        <div class="input-actions">
+                            <button class="ai-btn" data-category-id="${category.id}" title="AI-анализ">🤖</button>
+                            <button class="voice-btn" data-category-id="${category.id}" title="Голосовой ввод">🎤</button>
+                        </div>
+                    </div>
                     <div class="add-task-extras">
                         <div class="add-task-row">
                             <select data-category-id="${category.id}" class="priority-select">
@@ -1117,6 +2119,7 @@
                         </div>
                     </div>
                     <button class="add-btn" data-category-id="${category.id}">+ Добавить</button>
+                    <div class="ai-suggestions-container" data-category-id="${category.id}"></div>
                 </div>
             `;
 
@@ -1125,10 +2128,13 @@
                 container.innerHTML = '<div class="empty-state">Пусто ✨</div>';
             } else {
                 categoryTasks.forEach(task => {
-                    container.appendChild(createTaskElement(task));
+                    const el = createTaskElement(task);
+                    container.appendChild(el);
+                    initTiltEffect(el);
                 });
             }
 
+            // Drag-and-drop
             col.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 col.classList.add('drag-over');
@@ -1148,11 +2154,72 @@
                 }
             });
 
+            // Обработчики формы
             const addBtn = col.querySelector('.add-btn');
             const textInput = col.querySelector('.add-task-input');
             const deadlineInput = col.querySelector('input[data-type="deadline"]');
             const scheduledInput = col.querySelector('input[data-type="scheduled"]');
             const prioritySelect = col.querySelector('.priority-select');
+            const voiceBtn = col.querySelector('.voice-btn');
+            const aiBtn = col.querySelector('.ai-btn');
+            const suggestionsContainer = col.querySelector('.ai-suggestions-container');
+
+            voiceBtn.addEventListener('click', () => {
+                if (isRecording) {
+                    stopRecording();
+                } else {
+                    startRecording(textInput);
+                }
+            });
+
+            let aiTimeout = null;
+            textInput.addEventListener('input', () => {
+                clearTimeout(aiTimeout);
+                aiTimeout = setTimeout(() => {
+                    const text = textInput.value.trim();
+                    suggestionsContainer.innerHTML = '';
+                    if (text.length < 3) return;
+                    
+                    const suggestions = analyzeTask(text);
+                    if (suggestions.length === 0) return;
+                    
+                    suggestions.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = 'ai-suggestion';
+                        div.innerHTML = `
+                            <span style="font-size:14px;">🤖</span>
+                            <span class="ai-suggestion-text">${s.text}</span>
+                            <button class="ai-suggestion-btn">Да</button>
+                        `;
+                        div.querySelector('button').addEventListener('click', () => {
+                            // Создаём временную задачу для применения
+                            const tempTask = {
+                                id: Date.now(),
+                                text: textInput.value.trim(),
+                                categoryId: category.id,
+                                priority: prioritySelect.value,
+                                deadline: deadlineInput.value || null,
+                                scheduledDate: scheduledInput.value || null,
+                                done: false,
+                                subtasks: []
+                            };
+                            tasks.push(tempTask);
+                            applySuggestion(tempTask.id, s);
+                            suggestionsContainer.innerHTML = '';
+                        });
+                        suggestionsContainer.appendChild(div);
+                    });
+                }, 500);
+            });
+
+            aiBtn.addEventListener('click', () => {
+                const text = textInput.value.trim();
+                if (!text) {
+                    showToast('❌ Сначала введи задачу', 'danger');
+                    return;
+                }
+                textInput.dispatchEvent(new Event('input'));
+            });
 
             addBtn.addEventListener('click', () => {
                 const text = textInput.value.trim();
@@ -1171,8 +2238,15 @@
                 deadlineInput.value = '';
                 scheduledInput.value = '';
                 prioritySelect.value = 'medium';
+                suggestionsContainer.innerHTML = '';
                 save();
                 renderBoard();
+
+                // Telegram уведомление
+                if (localStorage.getItem('vibe_tg_token_v7')) {
+                    const cat = categories.find(c => c.id === category.id);
+                    sendToTelegram(`✅ Новая задача:\n\n<b>${text}</b>\n\nКатегория: ${cat ? cat.emoji + ' ' + cat.name : ''}`);
+                }
             });
 
             textInput.addEventListener('keypress', (e) => {
@@ -1285,8 +2359,6 @@
                 } else {
                     taskTextEl.textContent = originalText;
                 }
-                taskTextEl.removeEventListener('blur', finishEdit);
-                taskTextEl.removeEventListener('keydown', keyHandler);
             };
 
             const keyHandler = (e) => {
@@ -1294,7 +2366,7 @@
                 else if (e.key === 'Escape') { taskTextEl.textContent = originalText; taskTextEl.blur(); }
             };
 
-            taskTextEl.addEventListener('blur', finishEdit);
+            taskTextEl.addEventListener('blur', finishEdit, { once: true });
             taskTextEl.addEventListener('keydown', keyHandler);
         }
 
@@ -1326,14 +2398,11 @@
                 showToast('📅 Дата обновлена', 'success');
             };
 
-            input.addEventListener('blur', finish);
+            input.addEventListener('blur', finish, { once: true });
             input.addEventListener('change', finish);
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') input.blur();
-                if (e.key === 'Escape') {
-                    input.value = task[dateType] || '';
-                    input.blur();
-                }
+                if (e.key === 'Escape') { input.value = task[dateType] || ''; input.blur(); }
             });
         }
 
@@ -1400,7 +2469,12 @@
                 task.done = !task.done;
                 save();
                 renderBoard();
-                if (task.done) showToast('🎉 Отличная работа!', 'success');
+                if (task.done) {
+                    showToast('🎉 Отличная работа!', 'success');
+                    if (localStorage.getItem('vibe_tg_token_v7')) {
+                        sendToTelegram(`🎉 Выполнено: <b>${task.text}</b>`);
+                    }
+                }
             }
         }
 
@@ -1410,6 +2484,9 @@
             renderBoard();
         }
 
+        // ═══════════════════════════════════════════════════════
+        // 🏷 КАТЕГОРИИ
+        // ═══════════════════════════════════════════════════════
         const categoriesModal = document.getElementById('categoriesModal');
         document.getElementById('categoriesBtn').addEventListener('click', () => {
             categoriesModal.classList.add('active');
@@ -1459,7 +2536,7 @@
             });
         }
 
-        function deleteCategory(id) {
+        window.deleteCategory = (id) => {
             const count = tasks.filter(t => t.categoryId === id).length;
             if (count > 0) {
                 if (!confirm(`В этой категории ${count} задач. Они будут удалены. Продолжить?`)) return;
@@ -1470,8 +2547,68 @@
             renderCategoriesList();
             renderBoard();
             showToast('🗑 Категория удалена', 'success');
-        }
+        };
 
+        // ═══════════════════════════════════════════════════════
+        // 🔗 ИНТЕГРАЦИИ UI
+        // ═══════════════════════════════════════════════════════
+        const integrationsModal = document.getElementById('integrationsModal');
+        document.getElementById('integrationsBtn').addEventListener('click', () => {
+            integrationsModal.classList.add('active');
+            // Загружаем сохранённые настройки
+            document.getElementById('tgBotToken').value = localStorage.getItem('vibe_tg_token_v7') || '';
+            document.getElementById('tgChatId').value = localStorage.getItem('vibe_tg_chatid_v7') || '';
+            document.getElementById('firebaseConfig').value = localStorage.getItem('vibe_firebase_config_v7') || '';
+        });
+        document.getElementById('closeIntegrations').addEventListener('click', () => {
+            integrationsModal.classList.remove('active');
+        });
+        integrationsModal.addEventListener('click', (e) => {
+            if (e.target === integrationsModal) integrationsModal.classList.remove('active');
+        });
+
+        document.getElementById('exportICS').addEventListener('click', exportToICS);
+
+        document.getElementById('saveTgSettings').addEventListener('click', () => {
+            const token = document.getElementById('tgBotToken').value.trim();
+            const chatId = document.getElementById('tgChatId').value.trim();
+            if (token && chatId) {
+                localStorage.setItem('vibe_tg_token_v7', token);
+                localStorage.setItem('vibe_tg_chatid_v7', chatId);
+                showToast('✅ Telegram настроен', 'success');
+            } else {
+                localStorage.removeItem('vibe_tg_token_v7');
+                localStorage.removeItem('vibe_tg_chatid_v7');
+                showToast('🗑 Telegram отключён', 'success');
+            }
+        });
+
+        document.getElementById('testTg').addEventListener('click', async () => {
+            const success = await sendToTelegram('🧪 <b>Тестовое сообщение</b>\n\nVibe Notes работает!');
+            if (success) showToast('✅ Сообщение отправлено!', 'success');
+        });
+
+        document.getElementById('saveFirebase').addEventListener('click', () => {
+            const configStr = document.getElementById('firebaseConfig').value.trim();
+            if (configStr) {
+                try {
+                    JSON.parse(configStr);
+                    localStorage.setItem('vibe_firebase_config_v7', configStr);
+                    showToast('✅ Firebase сохранён. Перезагружаю...', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } catch (e) {
+                    showToast('❌ Неверный JSON', 'danger');
+                }
+            } else {
+                localStorage.removeItem('vibe_firebase_config_v7');
+                showToast('🗑 Firebase отключён', 'success');
+            }
+        });
+
+        // ═══════════════════════════════════════════════════════
+        // 📅 КАЛЕНДАРЬ
+        // ═══════════════════════════════════════════════════════
+        let calendarDate = new Date();
         const calendarModal = document.getElementById('calendarModal');
         document.getElementById('calendarBtn').addEventListener('click', () => {
             calendarModal.classList.add('active');
@@ -1573,13 +2710,13 @@
                 
                 deadlineTasks.slice(0, 2).forEach(t => {
                     const dot = document.createElement('div');
-                    dot.className = `task-dot dot-deadline`;
+                    dot.className = 'task-dot dot-deadline';
                     dots.appendChild(dot);
                 });
                 
                 scheduledTasks.slice(0, 2).forEach(t => {
                     const dot = document.createElement('div');
-                    dot.className = `task-dot dot-scheduled`;
+                    dot.className = 'task-dot dot-scheduled';
                     dots.appendChild(dot);
                 });
                 
@@ -1640,13 +2777,16 @@
             return item;
         }
 
+        // ═══════════════════════════════════════════════════════
+        // 📤 / 📥 ЭКСПОРТ / ИМПОРТ
+        // ═══════════════════════════════════════════════════════
         document.getElementById('exportBtn').addEventListener('click', () => {
             const data = { categories, tasks };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `vibe-notes-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `vibe-notes-${currentProfileId}-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
             showToast('📤 Экспортировано!', 'success');
@@ -1683,6 +2823,10 @@
             input.click();
         });
 
+        // ═══════════════════════════════════════════════════════
+        // 🔔 УВЕДОМЛЕНИЯ
+        // ═══════════════════════════════════════════════════════
+        let notificationsEnabled = false;
         document.getElementById('notifyBtn').addEventListener('click', async () => {
             if (!('Notification' in window)) {
                 showToast('❌ Не поддерживается', 'danger');
@@ -1716,6 +2860,9 @@
         setInterval(checkDeadlines, 60000);
         setInterval(renderBoard, 60000);
 
+        // ═══════════════════════════════════════════════════════
+        // 🔔 TOAST
+        // ═══════════════════════════════════════════════════════
         function showToast(message, type = 'success') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
@@ -1727,6 +2874,9 @@
             }, 2500);
         }
 
+        // ═══════════════════════════════════════════════════════
+        // 📱 PWA MANIFEST
+        // ═══════════════════════════════════════════════════════
         const manifest = {
             name: 'Vibe Notes',
             short_name: 'VibeNotes',
@@ -1735,6 +2885,15 @@
             display: 'standalone',
             background_color: '#0f172a',
             theme_color: '#6366f1',
+            shortcuts: [
+                {
+                    name: 'Новая задача',
+                    short_name: 'Добавить',
+                    description: 'Быстро добавить задачу',
+                    url: '?action=new',
+                    icons: [{ src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%236366f1'/%3E%3Ctext x='96' y='130' font-size='120' text-anchor='middle' fill='white'%3E+%3C/text%3E%3C/svg%3E", sizes: '192x192' }]
+                }
+            ],
             icons: [{
                 src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%236366f1'/%3E%3Ctext x='256' y='350' font-size='300' text-anchor='middle' fill='white'%3E🎧%3C/text%3E%3C/svg%3E",
                 sizes: '512x512',
@@ -1749,8 +2908,21 @@
         link.href = manifestURL;
         document.head.appendChild(link);
 
-        save();
+        // ═══════════════════════════════════════════════════════
+        // 🚀 СТАРТ
+        // ═══════════════════════════════════════════════════════
+        renderProfileSelector();
         renderBoard();
+        initFirebase();
+
+        // Обработка PWA shortcuts
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('action') === 'new') {
+            setTimeout(() => {
+                const firstInput = document.querySelector('.add-task-input');
+                if (firstInput) firstInput.focus();
+            }, 500);
+        }
     </script>
 </body>
 </html>
